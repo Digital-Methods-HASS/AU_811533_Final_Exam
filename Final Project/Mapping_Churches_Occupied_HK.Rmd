@@ -1,0 +1,128 @@
+---
+title: "Mapping Chinese Churches in Japanese Occupied Hong Kong"
+date: "2026-08-13"
+author: "Clarissa Lo"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1. Introduction & Packages Loading
+
+This report presents the spatial distribution and social roles of Chinese churches in Hong Kong during the Japanese Occupation using 'leaflet'.
+
+```{r load-packages}
+library(leaflet)
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(dplyr)
+
+hk_districts <- st_read("hksar_18_district_boundary.json", quiet = TRUE)
+```
+
+## 2. Data Preparation & Coordinates Processing
+
+Read 'wartime_churches.csv' and construct English HTML popups for the map interactivity.
+
+```{r process-data}
+df <- read_csv("wartime_churches.csv")
+
+df_map <- df %>%
+
+
+  mutate(
+    new_longitude = as.numeric(new_longitude),
+    origin_longitude = as.numeric(origin_longitude),
+    new_latitude = as.numeric(new_latitude),
+    origin_latitude = as.numeric(origin_latitude)
+  ) %>%
+ 
+  mutate(
+    lng = if_else(!is.na(new_longitude), new_longitude, origin_longitude),
+    lat = if_else(!is.na(new_latitude), new_latitude, origin_latitude)
+  ) %>%
+  
+  filter(!is.na(lng) & !is.na(lat)) %>%
+ 
+  mutate(
+    has_safety_net = ifelse(
+      !is.na(safety_net_service) & safety_net_service != "N/A" & safety_net_service != "None", 
+      "Provided", 
+      "None / No Record"
+    ),
+    marker_size = ifelse(has_safety_net == "Provided", 10, 5),
+    popup_content = paste0(
+  "<b>", church_name_en, "</b> (", church_name_ch, ")<br>",
+  "<b>Address:</b> ", address_cn, "<br>",
+  "<b>Wartime Status:</b> ", ifelse(is.na(wartime_status), "No Record", wartime_status), "<br>",
+  "<b>Safety Net Service:</b> ", ifelse(is.na(safety_net_service) | safety_net_service == "N/A", "None / No Record", safety_net_service), "<br>",
+  "<b>Japanese Policy Impact:</b> ", ifelse(is.na(japanese_policy_impact), "No Record", japanese_policy_impact), "<br><br>",
+  "<b>Description (EN):</b> ", ifelse(is.na(description_en) | description_en == "", "N/A", description_en), "<br>",
+  "<b>Description (ZH):</b> ", ifelse(is.na(description_ch) | description_ch == "", "無紀錄", description_ch)
+)
+  )
+```
+
+## 3. Interactive Map of Wartime Churches
+
+The markers are color-coded based on each church's **Wartime Status ('wartime_status')**:
+
+```{r render-map}
+# Define color palette for wartime status 
+pal_status <- colorFactor(palette = c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"),
+  domain = df_map$wartime_status)
+
+leaflet(df_map) %>% 
+  addTiles() %>% 
+  setView(lng = 114.168, lat = 22.319, zoom = 12) %>%
+addPolygons(
+    data = hk_districts,
+    fillColor = "transparent", 
+    color = "#444444",          
+    weight = 1,                 
+    dashArray = "3",
+    opacity = 0.7
+  ) %>% addCircleMarkers(
+    lng = ~lng, 
+    lat = ~lat, 
+    radius = ~marker_size,                  
+    color = ~pal_status(wartime_status),    
+    stroke = TRUE,                          
+    weight = 1,
+    fillOpacity = 0.8, 
+    popup = ~popup_content, 
+    label = ~church_name_en
+  ) %>% 
+  # Sample 1： Wartime Status (color)
+  addLegend(
+    position = "bottomright", 
+    pal = pal_status, 
+    values = ~wartime_status, 
+    title = "Wartime Status (Color)", 
+    opacity = 1
+  ) %>%
+  # Sample 2： Safety Net Service (size difference)
+  addLegend(
+    position = "bottomleft",
+    colors = c("gray", "gray"),
+    labels = c("Large Circle: Safety Net Provided", "Small Circle: No Safety Net / No Record"),
+    title = "Safety Net Service (Size)",
+    opacity = 1)
+```
+
+```{r}
+pie_data <- df %>%
+  mutate(safety_net_service = ifelse(is.na(safety_net_service) | safety_net_service == "", "N/A", safety_net_service)) %>%
+  count(safety_net_service) %>%
+  mutate(percentage = n / sum(n) * 100, legend_label = paste0(safety_net_service, " : ", n, " (", round(percentage, 1), "%)"))
+
+ggplot(pie_data, aes(x = "", y = n, fill = legend_label)) + geom_bar(stat = "identity", width = 1) + coord_polar("y", start = 0) + theme_void() + scale_fill_brewer(palette = "Set2") + labs(title = "Comparison of Chinese Churches as Safety Nets", subtitle = "During the Japanese Occupation of Hong Kong", fill = "Safety Net Service Category") + theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 16), plot.subtitle = element_text(hjust = 0.5, size = 12, color = "gray40"), legend.position = "right", legend.title = element_text(face = "bold"), legend.text = element_text(size = 11))
+
+```
