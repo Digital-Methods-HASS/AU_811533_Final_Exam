@@ -19,4 +19,4 @@ This project explores the spatial distribution and social functionality (e.g., s
 - **Data License:** Creative Commons Attribution 4.0 International (CC BY 4.0)
 
 ## Contact & Support
-For questions or inquiries regarding this repository, please contact: [Your Email Address]
+For questions or inquiries regarding this repository, please contact: [23235756@life.hkbu.edu.hk]
